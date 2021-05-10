@@ -1064,14 +1064,14 @@ public class ProtobufData {
               ? getWrappedValue((Message) value) : (Boolean) value;
           break;
         case STRING:
-          if (useWrapperForNullables && schema.isOptional()) {
-            converted = getWrappedValue((Message) value);
-          } else if (value instanceof String) {
+          if (value instanceof String) {
             converted = value;
           } else if (value instanceof CharSequence
               || value instanceof Enum
               || value instanceof EnumValueDescriptor) {
             converted = value.toString();
+          } else if (useWrapperForNullables && schema.isOptional()) {
+            converted = getWrappedValue((Message) value);
           } else {
             throw new DataException("Invalid class for string type, expecting String or "
                 + "CharSequence but found "
