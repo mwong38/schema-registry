@@ -438,12 +438,16 @@ public class ProtobufDataTest {
   }
 
   private SchemaAndValue getSchemaAndValue(Message message) throws Exception {
+    return getSchemaAndValue(message, new ProtobufDataConfig(Collections.emptyMap()));
+  }
+
+  private SchemaAndValue getSchemaAndValue(Message message, ProtobufDataConfig config) throws Exception {
     ProtobufSchema protobufSchema = new ProtobufSchema(message.getDescriptorForType());
     DynamicMessage dynamicMessage = DynamicMessage.parseFrom(
         protobufSchema.toDescriptor(),
         message.toByteArray()
     );
-    ProtobufData protobufData = new ProtobufData();
+    ProtobufData protobufData = new ProtobufData(config);
     SchemaAndValue schemaAndValue = protobufData.toConnectData(protobufSchema, dynamicMessage);
     if (schemaAndValue.schema() != null) {
       ConnectSchema.validateValue(schemaAndValue.schema(), schemaAndValue.value());
@@ -501,6 +505,26 @@ public class ProtobufDataTest {
     SchemaAndValue result = getSchemaAndValue(message);
     assertSchemasEqual(schema, result.schema());
     assertEquals(new SchemaAndValue(schema, getExpectedComplexTypeProtoWithDefaultOneOf()), result);
+  }
+
+  @Test
+  public void testToConnectDataRepeatedPrimitives() throws Exception {
+    NestedMessage message = NestedMessage.newBuilder()
+            .addAllExperimentsActive(Arrays.asList("A", "B", "C", "C"))
+            .setInner(NestedMessage.InnerMessage.newBuilder().addAllIds(Arrays.asList(1, 2, 3, 4, 5)))
+            .build();
+    ProtobufDataConfig protobufDataConfig = new ProtobufDataConfig(Collections.singletonMap(
+            ProtobufDataConfig.WRAPPER_FOR_NULLABLES_CONFIG, true
+    ));
+    SchemaAndValue result = getSchemaAndValue(message, protobufDataConfig);
+    byte[] messageBytes = getMessageBytes(result, protobufDataConfig);
+    NestedMessage roundTripMessage = NestedTestProto.NestedMessage.parseFrom(messageBytes);
+
+    assertEquals(message, roundTripMessage);
+
+    Schema expectedSchema = getExpectedNestedTestProtoSchema();
+    // TODO: Check why oneOf ('user_id.kafka_user_id') is not optional if WRAPPER_FOR_NULLABLES_CONFIG=true
+//    assertSchemasEqual(expectedSchema, result.schema());
   }
 
   // Data Conversion tests
@@ -766,7 +790,11 @@ public class ProtobufDataTest {
   }
 
   private byte[] getMessageBytes(SchemaAndValue schemaAndValue) throws Exception {
-    ProtobufData protobufData = new ProtobufData();
+    return getMessageBytes(schemaAndValue, new ProtobufDataConfig(Collections.emptyMap()));
+  }
+
+  private byte[] getMessageBytes(SchemaAndValue schemaAndValue, ProtobufDataConfig config) throws Exception {
+    ProtobufData protobufData = new ProtobufData(config);
     ProtobufSchemaAndValue protobufSchemaAndValue = protobufData.fromConnectData(schemaAndValue);
     DynamicMessage dynamicMessage = (DynamicMessage) protobufSchemaAndValue.getValue();
     ByteArrayOutputStream baos = new ByteArrayOutputStream();

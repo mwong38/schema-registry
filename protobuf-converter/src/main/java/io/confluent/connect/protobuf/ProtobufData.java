@@ -1325,7 +1325,6 @@ public class ProtobufData {
           String enumTag = String.valueOf(enumValueDesc.getNumber());
           builder.parameter(PROTOBUF_TYPE_ENUM_PREFIX + enumSymbol, enumTag);
         }
-        builder.optional();
         break;
 
       case MESSAGE: {
@@ -1406,7 +1405,6 @@ public class ProtobufData {
             }
             break;
         }
-        builder.optional();
         break;
       }
 
@@ -1415,12 +1413,52 @@ public class ProtobufData {
     }
 
     if (descriptor.isRepeated() && builder.type() != Schema.Type.MAP) {
-      Schema schema = builder.optional().build();
+      Schema schema;
+      if (useWrapperForNullables) {
+        // if is repeated and useWrappersForNullables, copy over
+        // everything and force required in SUPER hacky way
+        SchemaBuilder requiredBuilder;
+        switch (builder.type()) {
+          case ARRAY:
+            requiredBuilder = SchemaBuilder.array(builder.valueSchema());
+            break;
+          case MAP:
+            requiredBuilder = SchemaBuilder.map(builder.keySchema(), builder.valueSchema());
+            break;
+          default:
+            requiredBuilder = new SchemaBuilder(builder.type());
+        }
+        if (builder.name() != null) {
+          requiredBuilder.name(builder.name());
+        }
+        if (builder.version() != null) {
+          requiredBuilder.version(builder.version());
+        }
+        if (builder.doc() != null) {
+          requiredBuilder.doc(builder.doc());
+        }
+        if (builder.parameters() != null) {
+          requiredBuilder.parameters(builder.parameters());
+        }
+        if (builder.defaultValue() != null) {
+          requiredBuilder.defaultValue(builder.defaultValue());
+        }
+        if (builder.type() == Schema.Type.STRUCT) {
+          for (Field field : builder.fields()) {
+            requiredBuilder.field(field.name(), field.schema());
+          }
+        }
+        schema = requiredBuilder.required().build();
+      } else {
+        schema = builder.optional().build();
+      }
       builder = SchemaBuilder.array(schema);
       builder.optional();
     }
 
-    if (!useWrapperForNullables) {
+    if (!useWrapperForNullables
+            || descriptor.getType() == FieldDescriptor.Type.MESSAGE
+            || descriptor.getType() == FieldDescriptor.Type.ENUM) {
       builder.optional();
     }
     builder.parameter(PROTOBUF_TYPE_TAG, String.valueOf(descriptor.getNumber()));
